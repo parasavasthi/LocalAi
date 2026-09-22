@@ -12,7 +12,7 @@ struct OllamaOptions: Codable {
     var topP: Double
     var topK: Int
 
-    static let default = OllamaOptions(
+    static let defaultOptions = OllamaOptions(
         temperature: 0.7,
         topP: 0.9,
         topK: 40
@@ -300,7 +300,7 @@ final class OllamaService {
 
     func streamMessage(
         _ messages: [OllamaMessage],
-        options: OllamaOptions = .default
+        options: OllamaOptions = .defaultOptions
     ) -> AsyncThrowingStream<
         OllamaStreamResponse,
         Error
