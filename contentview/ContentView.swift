@@ -734,6 +734,8 @@ struct ContentView: View {
         }
     }
 
+    }
+
     // MARK: - Model Control Panel
 
     @ViewBuilder
