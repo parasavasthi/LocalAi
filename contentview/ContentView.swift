@@ -598,6 +598,7 @@ struct ContentView: View {
                             }
                         }
                     }
+                    .frame(maxHeight: .infinity)
                 }
 
                 Divider()
@@ -693,7 +694,10 @@ struct ContentView: View {
                     )
                 }
                 .padding(12)
+                .fixedSize(horizontal: false, vertical: true)
+                .layoutPriority(2)
             }
+            .frame(maxWidth: .infinity, alignment: .bottom)
         }
 
         // MARK: Startup
@@ -926,6 +930,7 @@ struct ContentView: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .fixedSize(horizontal: false, vertical: true)
+        .layoutPriority(0)
         .background(
             RoundedRectangle(cornerRadius: 12)
                 .fill(.quaternary.opacity(0.45))
