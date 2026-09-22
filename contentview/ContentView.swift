@@ -808,9 +808,7 @@ struct ContentView: View {
 
             LazyVGrid(
                 columns: [
-                    GridItem(.flexible(), alignment: .leading),
-                    GridItem(.flexible(), alignment: .leading),
-                    GridItem(.flexible(), alignment: .leading)
+                    GridItem(.adaptive(minimum: 120), alignment: .leading)
                 ],
                 alignment: .leading,
                 spacing: 10
@@ -897,7 +895,7 @@ struct ContentView: View {
                     }
                     .padding(.top, 6)
                 }
-                .frame(maxHeight: 170)
+                .frame(maxHeight: 135)
             } label: {
                 Label(
                     "Generation Settings",
@@ -927,8 +925,7 @@ struct ContentView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .frame(maxHeight: 320, alignment: .top)
-        .layoutPriority(0)
+        .fixedSize(horizontal: false, vertical: true)
         .background(
             RoundedRectangle(cornerRadius: 12)
                 .fill(.quaternary.opacity(0.45))
