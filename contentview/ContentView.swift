@@ -1929,9 +1929,9 @@ struct ContentView: View {
 
                         generationTask =
                             nil
-
-                        await refreshRuntimeInfo()
                     }
+
+                    await refreshRuntimeInfo()
 
                 } catch is CancellationError {
 
