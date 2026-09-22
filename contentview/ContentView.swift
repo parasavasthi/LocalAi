@@ -902,7 +902,7 @@ struct ContentView: View {
 
                 Spacer()
 
-                Text("System RAM \(formatBytes(ProcessInfo.processInfo.physicalMemory)) total")
+                Text("System RAM \(formatBytes(Int64(ProcessInfo.processInfo.physicalMemory))) total")
                     .foregroundStyle(.secondary)
             }
             .font(.caption)
