@@ -310,22 +310,26 @@ struct ContentView: View {
 
                     if modelPanelExpanded {
 
-                        modelControlPanel
-                            .padding(
-                                .horizontal,
-                                20
-                            )
-                            .padding(
-                                .bottom,
-                                12
-                            )
-                            .transition(
-                                .opacity.combined(
-                                    with: .move(
-                                        edge: .top
-                                    )
+                        ScrollView(.vertical, showsIndicators: false) {
+
+                            modelControlPanel
+                                .padding(
+                                    .horizontal,
+                                    20
+                                )
+                                .padding(
+                                    .bottom,
+                                    12
+                                )
+                        }
+                        .frame(maxHeight: 280)
+                        .transition(
+                            .opacity.combined(
+                                with: .move(
+                                    edge: .top
                                 )
                             )
+                        )
                     }
                 }
 
@@ -603,101 +607,95 @@ struct ContentView: View {
 
                 Divider()
 
-                // MARK: Input
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
 
-                HStack(
-                    alignment: .bottom,
-                    spacing: 10
-                ) {
+            HStack(
+                alignment: .bottom,
+                spacing: 10
+            ) {
 
-                    TextField(
-                        "Ask anything...",
-                        text: $inputText,
-                        axis: .vertical
+                TextField(
+                    "Ask anything...",
+                    text: $inputText,
+                    axis: .vertical
+                )
+                .textFieldStyle(.plain)
+                .padding(
+                    .horizontal,
+                    14
+                )
+                .padding(
+                    .vertical,
+                    10
+                )
+                .background(
+                    RoundedRectangle(
+                        cornerRadius: 10
                     )
-                    .textFieldStyle(.plain)
-                    .padding(
-                        .horizontal,
-                        14
-                    )
-                    .padding(
-                        .vertical,
-                        10
-                    )
-                    .background(
-                        RoundedRectangle(
-                            cornerRadius: 10
-                        )
-                        .fill(.quaternary)
-                    )
-                    .lineLimit(1...6)
-                    .onSubmit {
+                    .fill(.quaternary)
+                )
+                .lineLimit(1...6)
+                .onSubmit {
 
-                        if !isLoading {
-                            sendMessage()
-                        }
+                    if !isLoading {
+                        sendMessage()
                     }
-                    .onKeyPress(.return, phases: .down) { press in
-                        if press.modifiers.contains(.shift) {
-                            return .ignored
-                        }
+                }
+                .onKeyPress(.return, phases: .down) { press in
 
-                        if !isLoading {
-                            sendMessage()
-                            return .handled
-                        }
+                    if press.modifiers.contains(.shift) {
+                        return .ignored
+                    }
 
+                    if !isLoading {
+                        sendMessage()
                         return .handled
                     }
 
-                    Button {
+                    return .handled
+                }
 
-                        if isLoading {
+                Button {
 
-                            stopGeneration()
-
-                        } else {
-
-                            sendMessage()
-                        }
-
-                    } label: {
-
-                        Image(
-                            systemName:
-                                isLoading
-                                ? "stop.fill"
-                                : "arrow.up"
-                        )
-                        .fontWeight(.semibold)
-                        .frame(
-                            width: 36,
-                            height: 36
-                        )
+                    if isLoading {
+                        stopGeneration()
+                    } else {
+                        sendMessage()
                     }
-                    .buttonStyle(
-                        .borderedProminent
+
+                } label: {
+
+                    Image(
+                        systemName:
+                            isLoading
+                            ? "stop.fill"
+                            : "arrow.up"
                     )
-                    .disabled(
-                        !isLoading &&
-                        (
-                            !ollamaOnline ||
-                            modelStatus != .on ||
-                            selectedChatID == nil ||
-                            inputText
-                                .trimmingCharacters(
-                                    in:
-                                        .whitespacesAndNewlines
-                                )
-                                .isEmpty
-                        )
+                    .fontWeight(.semibold)
+                    .frame(
+                        width: 36,
+                        height: 36
                     )
                 }
-                .padding(12)
-                .fixedSize(horizontal: false, vertical: true)
-                .layoutPriority(2)
+                .buttonStyle(.borderedProminent)
+                .disabled(
+                    !isLoading &&
+                    (
+                        !ollamaOnline ||
+                        modelStatus != .on ||
+                        selectedChatID == nil ||
+                        inputText
+                            .trimmingCharacters(
+                                in:
+                                    .whitespacesAndNewlines
+                            )
+                            .isEmpty
+                    )
+                )
             }
-            .frame(maxWidth: .infinity, alignment: .bottom)
+            .padding(12)
+            .background(.bar)
         }
 
         // MARK: Startup
@@ -929,8 +927,6 @@ struct ContentView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .fixedSize(horizontal: false, vertical: true)
-        .layoutPriority(0)
         .background(
             RoundedRectangle(cornerRadius: 12)
                 .fill(.quaternary.opacity(0.45))
