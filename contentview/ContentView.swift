@@ -220,7 +220,13 @@ struct ContentView: View {
                 Spacer()
             }
             .padding()
-            .frame(minWidth: 220)
+            .frame(minWidth: 220, idealWidth: 260, maxWidth: 320)
+
+            .navigationSplitViewColumnWidth(
+                min: 220,
+                ideal: 260,
+                max: 320
+            )
 
         } detail: {
 
@@ -800,7 +806,15 @@ struct ContentView: View {
                 }
             }
 
-            HStack(spacing: 18) {
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(), alignment: .leading),
+                    GridItem(.flexible(), alignment: .leading),
+                    GridItem(.flexible(), alignment: .leading)
+                ],
+                alignment: .leading,
+                spacing: 10
+            ) {
 
                 metricTile(
                     title: "Model Memory",
@@ -931,6 +945,7 @@ struct ContentView: View {
                 .monospacedDigit()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .lineLimit(1)
     }
 
     private func refreshRuntimeInfo() async {
