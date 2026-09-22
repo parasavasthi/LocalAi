@@ -851,50 +851,53 @@ struct ContentView: View {
             DisclosureGroup(
                 isExpanded: $modelSettingsExpanded
             ) {
-                VStack(spacing: 10) {
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(spacing: 10) {
 
-                    HStack {
-                        Text("Temperature")
-                        Spacer()
-                        Text(String(format: "%.2f", temperature))
-                            .monospacedDigit()
+                        HStack {
+                            Text("Temperature")
+                            Spacer()
+                            Text(String(format: "%.2f", temperature))
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Slider(value: $temperature, in: 0...2, step: 0.05)
+
+                        HStack {
+                            Text("Top P")
+                            Spacer()
+                            Text(String(format: "%.2f", topP))
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Slider(value: $topP, in: 0...1, step: 0.05)
+
+                        HStack {
+                            Text("Top K")
+                            Spacer()
+                            Text("\(topK)")
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Slider(
+                            value: Binding(
+                                get: { Double(topK) },
+                                set: { topK = Int($0.rounded()) }
+                            ),
+                            in: 1...100,
+                            step: 1
+                        )
+
+                        Text("Generation settings apply to new responses.")
+                            .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
-
-                    Slider(value: $temperature, in: 0...2, step: 0.05)
-
-                    HStack {
-                        Text("Top P")
-                        Spacer()
-                        Text(String(format: "%.2f", topP))
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Slider(value: $topP, in: 0...1, step: 0.05)
-
-                    HStack {
-                        Text("Top K")
-                        Spacer()
-                        Text("\(topK)")
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Slider(
-                        value: Binding(
-                            get: { Double(topK) },
-                            set: { topK = Int($0.rounded()) }
-                        ),
-                        in: 1...100,
-                        step: 1
-                    )
-
-                    Text("Generation settings apply to new responses.")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                    .padding(.top, 6)
                 }
-                .padding(.top, 6)
+                .frame(maxHeight: 170)
             } label: {
                 Label(
                     "Generation Settings",
@@ -924,6 +927,8 @@ struct ContentView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
+        .frame(maxHeight: 320, alignment: .top)
+        .layoutPriority(0)
         .background(
             RoundedRectangle(cornerRadius: 12)
                 .fill(.quaternary.opacity(0.45))
