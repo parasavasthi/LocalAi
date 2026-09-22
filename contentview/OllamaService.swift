@@ -7,17 +7,37 @@ struct OllamaMessage: Codable {
     let content: String
 }
 
+struct OllamaOptions: Codable {
+    var temperature: Double
+    var topP: Double
+    var topK: Int
+
+    static let defaultOptions = OllamaOptions(
+        temperature: 0.7,
+        topP: 0.9,
+        topK: 40
+    )
+
+    enum CodingKeys: String, CodingKey {
+        case temperature
+        case topP = "top_p"
+        case topK = "top_k"
+    }
+}
+
 struct OllamaRequest: Codable {
     let model: String
     let messages: [OllamaMessage]
     let stream: Bool
     let keepAlive: String
+    let options: OllamaOptions
 
     enum CodingKeys: String, CodingKey {
         case model
         case messages
         case stream
         case keepAlive = "keep_alive"
+        case options
     }
 }
 
@@ -45,6 +65,51 @@ struct OllamaStreamResponse: Codable {
     let model: String?
     let message: OllamaStreamMessage?
     let done: Bool
+    let totalDuration: Double?
+    let loadDuration: Double?
+    let promptEvalCount: Int?
+    let promptEvalDuration: Double?
+    let evalCount: Int?
+    let evalDuration: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case model
+        case message
+        case done
+        case totalDuration = "total_duration"
+        case loadDuration = "load_duration"
+        case promptEvalCount = "prompt_eval_count"
+        case promptEvalDuration = "prompt_eval_duration"
+        case evalCount = "eval_count"
+        case evalDuration = "eval_duration"
+    }
+}
+
+struct OllamaRunningModel: Codable {
+    let name: String?
+    let model: String?
+    let size: Int64?
+    let sizeVRAM: Int64?
+    let contextLength: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case model
+        case size
+        case sizeVRAM = "size_vram"
+        case contextLength = "context_length"
+    }
+}
+
+struct OllamaPSResponse: Codable {
+    let models: [OllamaRunningModel]
+}
+
+struct OllamaRuntimeInfo {
+    let isLoaded: Bool
+    let memoryBytes: Int64
+    let vramBytes: Int64
+    let contextLength: Int
 }
 
 // MARK: - Ollama Service
@@ -200,8 +265,42 @@ final class OllamaService {
 
     // MARK: - Streaming
 
+    func fetchRuntimeInfo() async -> OllamaRuntimeInfo {
+        let url = baseURL.appendingPathComponent("api/ps")
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 5
+
+        do {
+            let (data, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse,
+                  (200...299).contains(http.statusCode) else {
+                return OllamaRuntimeInfo(isLoaded: false, memoryBytes: 0, vramBytes: 0, contextLength: 0)
+            }
+
+            let decoded = try JSONDecoder().decode(OllamaPSResponse.self, from: data)
+            guard let model = decoded.models.first(where: {
+                ($0.name ?? $0.model ?? "") == Self.defaultModel
+            }) ?? decoded.models.first else {
+                return OllamaRuntimeInfo(isLoaded: false, memoryBytes: 0, vramBytes: 0, contextLength: 0)
+            }
+
+            return OllamaRuntimeInfo(
+                isLoaded: true,
+                memoryBytes: model.size ?? 0,
+                vramBytes: model.sizeVRAM ?? 0,
+                contextLength: model.contextLength ?? 0
+            )
+        } catch {
+            return OllamaRuntimeInfo(isLoaded: false, memoryBytes: 0, vramBytes: 0, contextLength: 0)
+        }
+    }
+
+    // MARK: - Streaming
+
     func streamMessage(
-        _ messages: [OllamaMessage]
+        _ messages: [OllamaMessage],
+        options: OllamaOptions = .defaultOptions
     ) -> AsyncThrowingStream<
         OllamaStreamResponse,
         Error
@@ -225,7 +324,9 @@ final class OllamaService {
                                 true,
 
                             keepAlive:
-                                "30m"
+                                "30m",
+                            options:
+                                options
                         )
 
                     var request =

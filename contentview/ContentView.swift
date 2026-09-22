@@ -48,6 +48,20 @@ struct ContentView: View {
     @State private var showLatestButton = false
     @State private var isProgrammaticScroll = false
 
+    // MARK: Search / Metrics / Generation Settings
+
+    @State private var chatSearchText = ""
+    @State private var modelSettingsExpanded = false
+    @State private var temperature = 0.7
+    @State private var topP = 0.9
+    @State private var topK = 40
+    @State private var runtimeInfo = OllamaRuntimeInfo(
+        isLoaded: false,
+        memoryBytes: 0,
+        vramBytes: 0,
+        contextLength: 0
+    )
+
     private let ollamaService = OllamaService()
 
     enum ModelStatus {
@@ -69,6 +83,34 @@ struct ContentView: View {
         return chatStore.chats.first {
             $0.id == selectedChatID
         }?.messages ?? []
+    }
+
+    private var filteredChats: [Chat] {
+        let query = chatSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else {
+            return chatStore.chats
+        }
+
+        return chatStore.chats.filter { chat in
+            let haystack = (
+                chat.title + " " +
+                chat.messages.map {
+                    $0.content + " " + $0.thinking
+                }.joined(separator: " ")
+            )
+
+            return haystack.localizedCaseInsensitiveContains(query)
+        }
+    }
+
+    private var currentChatStats: ResponseStatsSummary {
+        ResponseStatsSummary(messages: currentMessages)
+    }
+
+    private var sessionStats: ResponseStatsSummary {
+        ResponseStatsSummary(
+            messages: chatStore.chats.flatMap(\.messages)
+        )
     }
 
     // MARK: - Body
@@ -109,15 +151,53 @@ struct ContentView: View {
 
                 Divider()
 
-                Text("Chats")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 8) {
+                    Text("Chats")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Spacer()
+
+                    if !chatSearchText.isEmpty {
+                        Text("\(filteredChats.count)")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+
+                TextField("Search chats...", text: $chatSearchText)
+                    .textFieldStyle(.roundedBorder)
+                    .overlay(alignment: .trailing) {
+                        if !chatSearchText.isEmpty {
+                            Button {
+                                chatSearchText = ""
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.trailing, 7)
+                        }
+                    }
 
                 if chatStore.chats.isEmpty {
 
                     Text("No conversations yet.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+
+                } else if filteredChats.isEmpty {
+
+                    VStack(spacing: 8) {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundStyle(.secondary)
+
+                        Text("No matching chats.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
 
                 } else {
 
@@ -128,7 +208,7 @@ struct ContentView: View {
                         ) {
 
                             ForEach(
-                                chatStore.chats
+                                filteredChats
                             ) { chat in
 
                                 chatRow(chat)
@@ -140,7 +220,13 @@ struct ContentView: View {
                 Spacer()
             }
             .padding()
-            .frame(minWidth: 220)
+            .frame(minWidth: 220, idealWidth: 260, maxWidth: 320)
+
+            .navigationSplitViewColumnWidth(
+                min: 220,
+                ideal: 260,
+                max: 320
+            )
 
         } detail: {
 
@@ -224,22 +310,26 @@ struct ContentView: View {
 
                     if modelPanelExpanded {
 
-                        modelControlPanel
-                            .padding(
-                                .horizontal,
-                                20
-                            )
-                            .padding(
-                                .bottom,
-                                12
-                            )
-                            .transition(
-                                .opacity.combined(
-                                    with: .move(
-                                        edge: .top
-                                    )
+                        ScrollView(.vertical, showsIndicators: false) {
+
+                            modelControlPanel
+                                .padding(
+                                    .horizontal,
+                                    20
+                                )
+                                .padding(
+                                    .bottom,
+                                    12
+                                )
+                        }
+                        .frame(maxHeight: 280)
+                        .transition(
+                            .opacity.combined(
+                                with: .move(
+                                    edge: .top
                                 )
                             )
+                        )
                     }
                 }
 
@@ -512,90 +602,100 @@ struct ContentView: View {
                             }
                         }
                     }
+                    .frame(maxHeight: .infinity)
                 }
 
                 Divider()
 
-                // MARK: Input
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
 
-                HStack(
-                    alignment: .bottom,
-                    spacing: 10
-                ) {
+            HStack(
+                alignment: .bottom,
+                spacing: 10
+            ) {
 
-                    TextField(
-                        "Ask anything...",
-                        text: $inputText,
-                        axis: .vertical
+                TextField(
+                    "Ask anything...",
+                    text: $inputText,
+                    axis: .vertical
+                )
+                .textFieldStyle(.plain)
+                .padding(
+                    .horizontal,
+                    14
+                )
+                .padding(
+                    .vertical,
+                    10
+                )
+                .background(
+                    RoundedRectangle(
+                        cornerRadius: 10
                     )
-                    .textFieldStyle(.plain)
-                    .padding(
-                        .horizontal,
-                        14
-                    )
-                    .padding(
-                        .vertical,
-                        10
-                    )
-                    .background(
-                        RoundedRectangle(
-                            cornerRadius: 10
-                        )
-                        .fill(.quaternary)
-                    )
-                    .lineLimit(1...6)
-                    .onSubmit {
+                    .fill(.quaternary)
+                )
+                .lineLimit(1...6)
+                .onSubmit {
 
-                        if !isLoading {
-                            sendMessage()
-                        }
+                    if !isLoading {
+                        sendMessage()
+                    }
+                }
+                .onKeyPress(.return, phases: .down) { press in
+
+                    if press.modifiers.contains(.shift) {
+                        return .ignored
                     }
 
-                    Button {
-
-                        if isLoading {
-
-                            stopGeneration()
-
-                        } else {
-
-                            sendMessage()
-                        }
-
-                    } label: {
-
-                        Image(
-                            systemName:
-                                isLoading
-                                ? "stop.fill"
-                                : "arrow.up"
-                        )
-                        .fontWeight(.semibold)
-                        .frame(
-                            width: 36,
-                            height: 36
-                        )
+                    if !isLoading {
+                        sendMessage()
+                        return .handled
                     }
-                    .buttonStyle(
-                        .borderedProminent
+
+                    return .handled
+                }
+
+                Button {
+
+                    if isLoading {
+                        stopGeneration()
+                    } else {
+                        sendMessage()
+                    }
+
+                } label: {
+
+                    Image(
+                        systemName:
+                            isLoading
+                            ? "stop.fill"
+                            : "arrow.up"
                     )
-                    .disabled(
-                        !isLoading &&
-                        (
-                            !ollamaOnline ||
-                            modelStatus != .on ||
-                            selectedChatID == nil ||
-                            inputText
-                                .trimmingCharacters(
-                                    in:
-                                        .whitespacesAndNewlines
-                                )
-                                .isEmpty
-                        )
+                    .fontWeight(.semibold)
+                    .frame(
+                        width: 36,
+                        height: 36
                     )
                 }
-                .padding(12)
+                .buttonStyle(.borderedProminent)
+                .disabled(
+                    !isLoading &&
+                    (
+                        !ollamaOnline ||
+                        modelStatus != .on ||
+                        selectedChatID == nil ||
+                        inputText
+                            .trimmingCharacters(
+                                in:
+                                    .whitespacesAndNewlines
+                            )
+                            .isEmpty
+                    )
+                )
             }
+            .padding(12)
+            .background(.bar)
         }
 
         // MARK: Startup
@@ -634,118 +734,248 @@ struct ContentView: View {
         }
     }
 
+    }
+
     // MARK: - Model Control Panel
 
     @ViewBuilder
     private var modelControlPanel: some View {
 
-        HStack(spacing: 16) {
+        VStack(spacing: 12) {
 
-            HStack(spacing: 10) {
+            HStack(spacing: 16) {
 
-                Image(systemName: "cpu")
-                    .font(.title3)
-                    .frame(
-                        width: 34,
-                        height: 34
-                    )
-                    .background(
-                        RoundedRectangle(
-                            cornerRadius: 8
+                HStack(spacing: 10) {
+
+                    Image(systemName: "cpu")
+                        .font(.title3)
+                        .frame(width: 34, height: 34)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(.quaternary)
                         )
-                        .fill(.quaternary)
-                    )
 
-                VStack(
-                    alignment: .leading,
-                    spacing: 3
-                ) {
+                    VStack(alignment: .leading, spacing: 3) {
 
-                    Text(
-                        OllamaService.defaultModel
-                    )
-                    .font(.subheadline)
-                    .fontWeight(.medium)
+                        Text(OllamaService.defaultModel)
+                            .font(.subheadline)
+                            .fontWeight(.medium)
 
-                    Text("Local model")
-                        .font(.caption)
-                        .foregroundStyle(
-                            .secondary
-                        )
+                        Text("Local model")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
-            }
 
-            Spacer()
+                Spacer()
 
-            ollamaStatusPill
+                ollamaStatusPill
 
-            Divider()
-                .frame(height: 30)
+                Divider()
+                    .frame(height: 30)
 
-            VStack(
-                alignment: .trailing,
-                spacing: 2
-            ) {
+                VStack(alignment: .trailing, spacing: 2) {
 
-                Text(modelStatusText)
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
+                    Text(modelStatusText)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
 
-                Text(modelStatusDescription)
-                    .font(.caption)
-                    .foregroundStyle(
-                        .secondary
-                    )
-            }
+                    Text(modelStatusDescription)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
 
-            if modelStatus == .loading ||
-                modelStatus == .starting {
+                if modelStatus == .loading ||
+                    modelStatus == .starting {
 
-                ProgressView()
-                    .controlSize(.small)
+                    ProgressView()
+                        .controlSize(.small)
 
-            } else {
+                } else {
 
-                Toggle(
-                    "",
-                    isOn:
-                        Binding(
-                            get: {
-                                modelEnabled
-                            },
+                    Toggle(
+                        "",
+                        isOn: Binding(
+                            get: { modelEnabled },
                             set: { newValue in
-
                                 Task {
-                                    await setModelPower(
-                                        newValue
-                                    )
+                                    await setModelPower(newValue)
                                 }
                             }
                         )
+                    )
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .disabled(!ollamaOnline)
+                }
+            }
+
+            LazyVGrid(
+                columns: [
+                    GridItem(.adaptive(minimum: 120), alignment: .leading)
+                ],
+                alignment: .leading,
+                spacing: 10
+            ) {
+
+                metricTile(
+                    title: "Model Memory",
+                    value: formatBytes(runtimeInfo.memoryBytes)
                 )
-                .labelsHidden()
-                .toggleStyle(.switch)
-                .disabled(!ollamaOnline)
+
+                metricTile(
+                    title: "VRAM / GPU",
+                    value:
+                        runtimeInfo.vramBytes > 0
+                        ? formatBytes(runtimeInfo.vramBytes)
+                        : "CPU / Unified"
+                )
+
+                metricTile(
+                    title: "Context",
+                    value:
+                        runtimeInfo.contextLength > 0
+                        ? formatNumber(runtimeInfo.contextLength)
+                        : "—"
+                )
+
+                metricTile(
+                    title: "Chat Tokens",
+                    value: formatNumber(currentChatStats.totalTokens)
+                )
+
+                metricTile(
+                    title: "Session Tokens",
+                    value: formatNumber(sessionStats.totalTokens)
+                )
+            }
+
+            DisclosureGroup(
+                isExpanded: $modelSettingsExpanded
+            ) {
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(spacing: 10) {
+
+                        HStack {
+                            Text("Temperature")
+                            Spacer()
+                            Text(String(format: "%.2f", temperature))
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Slider(value: $temperature, in: 0...2, step: 0.05)
+
+                        HStack {
+                            Text("Top P")
+                            Spacer()
+                            Text(String(format: "%.2f", topP))
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Slider(value: $topP, in: 0...1, step: 0.05)
+
+                        HStack {
+                            Text("Top K")
+                            Spacer()
+                            Text("\(topK)")
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Slider(
+                            value: Binding(
+                                get: { Double(topK) },
+                                set: { topK = Int($0.rounded()) }
+                            ),
+                            in: 1...100,
+                            step: 1
+                        )
+
+                        Text("Generation settings apply to new responses.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.top, 6)
+                }
+                .frame(maxHeight: 135)
+            } label: {
+                Label(
+                    "Generation Settings",
+                    systemImage: "slider.horizontal.3"
+                )
+                .font(.caption)
+            }
+
+            HStack {
+                Label(
+                    runtimeInfo.isLoaded
+                    ? "Model loaded in memory"
+                    : "Model not currently loaded",
+                    systemImage:
+                        runtimeInfo.isLoaded
+                        ? "memorychip"
+                        : "memorychip.slash"
+                )
+
+                Spacer()
+
+                Text("System RAM \(formatBytes(Int64(ProcessInfo.processInfo.physicalMemory))) total")
+                    .foregroundStyle(.secondary)
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(.quaternary.opacity(0.45))
+        )
+        .task {
+            await refreshRuntimeInfo()
+        }
+    }
+
+    private func metricTile(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+
+            Text(value)
+                .font(.caption)
+                .fontWeight(.semibold)
+                .monospacedDigit()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .lineLimit(1)
+    }
+
+    private func refreshRuntimeInfo() async {
+        let info = await ollamaService.fetchRuntimeInfo()
+
+        await MainActor.run {
+            runtimeInfo = info
+
+            if info.isLoaded && modelStatus == .on {
+                modelEnabled = true
             }
         }
-        .padding(
-            .horizontal,
-            14
-        )
-        .padding(
-            .vertical,
-            10
-        )
-        .background(
-            RoundedRectangle(
-                cornerRadius: 12
-            )
-            .fill(
-                .quaternary.opacity(
-                    0.45
-                )
-            )
-        )
+    }
+
+    private func formatBytes(_ bytes: Int64) -> String {
+        guard bytes > 0 else { return "—" }
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .memory
+        formatter.includesUnit = true
+        formatter.includesCount = true
+        return formatter.string(fromByteCount: bytes)
+    }
+
+    private func formatNumber(_ value: Int) -> String {
+        value.formatted(.number)
     }
 
     // MARK: - Ollama Status Pill
@@ -1568,7 +1798,12 @@ struct ContentView: View {
                     let stream =
                         ollamaService
                         .streamMessage(
-                            conversation
+                            conversation,
+                            options: OllamaOptions(
+                                temperature: temperature,
+                                topP: topP,
+                                topK: topK
+                            )
                         )
 
                     var content =
@@ -1576,6 +1811,8 @@ struct ContentView: View {
 
                     var thinking =
                         ""
+
+                    var finalStats: ResponseStats?
 
                     for try await chunk
                         in stream {
@@ -1601,6 +1838,20 @@ struct ContentView: View {
 
                             content +=
                                 value
+                        }
+
+                        if chunk.done {
+                            let promptTokens = chunk.promptEvalCount ?? 0
+                            let generatedTokens = chunk.evalCount ?? 0
+
+                            finalStats = ResponseStats(
+                                promptTokens: promptTokens,
+                                generatedTokens: generatedTokens,
+                                totalDuration: (chunk.totalDuration ?? 0) / 1_000_000_000,
+                                promptDuration: (chunk.promptEvalDuration ?? 0) / 1_000_000_000,
+                                generationDuration: (chunk.evalDuration ?? 0) / 1_000_000_000,
+                                loadDuration: (chunk.loadDuration ?? 0) / 1_000_000_000
+                            )
                         }
 
                         await MainActor.run {
@@ -1652,7 +1903,10 @@ struct ContentView: View {
                                         content,
 
                                     thinking:
-                                        thinking
+                                        thinking,
+
+                                    stats:
+                                        finalStats
                                 )
 
                             chatStore
@@ -1696,6 +1950,8 @@ struct ContentView: View {
                         generationTask =
                             nil
                     }
+
+                    await refreshRuntimeInfo()
 
                 } catch is CancellationError {
 
@@ -1889,83 +2145,45 @@ struct ContentView: View {
 struct MessageBubble: View {
 
     let message: ChatMessage
-
     let isThinkingExpanded: Bool
-
     let isGenerating: Bool
-
     let toggleThinking: () -> Void
 
     var body: some View {
 
-        HStack(
-            alignment: .top
-        ) {
+        HStack(alignment: .top) {
 
-            if message.role ==
-                .assistant {
+            if message.role == .assistant {
 
-                Image(
-                    systemName:
-                        "cpu"
-                )
-                .frame(
-                    width: 30,
-                    height: 30
-                )
-                .background(
-                    Circle()
-                        .fill(
-                            .quaternary
-                        )
-                )
+                Image(systemName: "cpu")
+                    .frame(width: 30, height: 30)
+                    .background(
+                        Circle().fill(.quaternary)
+                    )
 
-                VStack(
-                    alignment: .leading,
-                    spacing: 8
-                ) {
+                VStack(alignment: .leading, spacing: 8) {
 
                     Text("Qwen3")
-                        .font(
-                            .caption
-                        )
-                        .fontWeight(
-                            .semibold
-                        )
-                        .foregroundStyle(
-                            .secondary
-                        )
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.secondary)
 
-                    if !message
-                        .thinking
-                        .isEmpty {
+                    if !message.thinking.isEmpty {
 
                         Button {
-
                             toggleThinking()
-
                         } label: {
 
-                            HStack(
-                                spacing: 6
-                            ) {
-
-                                Image(
-                                    systemName:
-                                        "brain"
-                                )
+                            HStack(spacing: 6) {
+                                Image(systemName: "brain")
 
                                 Text(
                                     isGenerating
                                     ? "Thinking..."
                                     : "Thoughts"
                                 )
-                                .font(
-                                    .caption
-                                )
-                                .fontWeight(
-                                    .medium
-                                )
+                                .font(.caption)
+                                .fontWeight(.medium)
 
                                 Image(
                                     systemName:
@@ -1973,64 +2191,37 @@ struct MessageBubble: View {
                                         ? "chevron.down"
                                         : "chevron.right"
                                 )
-                                .font(
-                                    .caption2
-                                )
+                                .font(.caption2)
 
                                 Spacer()
                             }
-                            .foregroundStyle(
-                                .secondary
-                            )
+                            .foregroundStyle(.secondary)
                         }
-                        .buttonStyle(
-                            .plain
-                        )
+                        .buttonStyle(.plain)
 
                         if isThinkingExpanded {
 
-                            Text(
-                                message.thinking
-                            )
-                            .font(
-                                .system(
-                                    size: 12
+                            Text(message.thinking)
+                                .font(.system(size: 12))
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                                .padding(.leading, 8)
+                                .overlay(
+                                    Rectangle()
+                                        .frame(width: 2)
+                                        .foregroundStyle(.quaternary),
+                                    alignment: .leading
                                 )
-                            )
-                            .foregroundStyle(
-                                .secondary
-                            )
-                            .textSelection(
-                                .enabled
-                            )
-                            .padding(
-                                .leading,
-                                8
-                            )
-                            .overlay(
-                                Rectangle()
-                                    .frame(
-                                        width: 2
-                                    )
-                                    .foregroundStyle(
-                                        .quaternary
-                                    ),
-                                alignment:
-                                    .leading
-                            )
                         }
                     }
 
-                    if !message
-                        .content
-                        .isEmpty {
+                    if !message.content.isEmpty {
+                        Text(message.content)
+                            .textSelection(.enabled)
+                    }
 
-                        Text(
-                            message.content
-                        )
-                        .textSelection(
-                            .enabled
-                        )
+                    if let stats = message.stats {
+                        ResponseStatsView(stats: stats)
                     }
                 }
 
@@ -2040,55 +2231,104 @@ struct MessageBubble: View {
 
                 Spacer()
 
-                VStack(
-                    alignment:
-                        .trailing,
-                    spacing: 5
-                ) {
+                VStack(alignment: .trailing, spacing: 5) {
 
                     Text("You")
-                        .font(
-                            .caption
-                        )
-                        .fontWeight(
-                            .semibold
-                        )
-                        .foregroundStyle(
-                            .secondary
-                        )
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.secondary)
 
-                    Text(
-                        message.content
-                    )
-                    .textSelection(
-                        .enabled
-                    )
-                    .padding(
-                        .horizontal,
-                        14
-                    )
-                    .padding(
-                        .vertical,
-                        10
-                    )
-                    .background(
-                        RoundedRectangle(
-                            cornerRadius:
-                                14
+                    Text(message.content)
+                        .textSelection(.enabled)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14)
+                                .fill(.blue.opacity(0.15))
                         )
-                        .fill(
-                            .blue.opacity(
-                                0.15
-                            )
-                        )
-                    )
                 }
             }
         }
-        .padding(
-            .horizontal,
-            20
-        )
+        .padding(.horizontal, 20)
+    }
+}
+
+struct ResponseStatsSummary {
+    let promptTokens: Int
+    let generatedTokens: Int
+
+    init(messages: [ChatMessage]) {
+        promptTokens = messages.compactMap { $0.stats?.promptTokens }.reduce(0, +)
+        generatedTokens = messages.compactMap { $0.stats?.generatedTokens }.reduce(0, +)
+    }
+
+    var totalTokens: Int {
+        promptTokens + generatedTokens
+    }
+}
+
+struct ResponseStatsView: View {
+    let stats: ResponseStats
+    @State private var expanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+
+            Button {
+                expanded.toggle()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "chart.bar")
+                    Text("\(stats.totalTokens) tokens")
+                    Text("•")
+                    Text(String(format: "%.1f tok/s", stats.tokensPerSecond))
+                    Text("•")
+                    Text(String(format: "%.1fs", stats.totalSeconds))
+
+                    Image(
+                        systemName:
+                            expanded
+                            ? "chevron.down"
+                            : "chevron.right"
+                    )
+                    .font(.caption2)
+
+                    Spacer()
+                }
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+            }
+            .buttonStyle(.plain)
+
+            if expanded {
+                HStack(spacing: 14) {
+                    statDetail("Input", "\(stats.promptTokens)")
+                    statDetail("Output", "\(stats.generatedTokens)")
+                    statDetail(
+                        "Generation",
+                        String(format: "%.2fs", stats.generationSeconds)
+                    )
+                    statDetail(
+                        "Load",
+                        String(format: "%.2fs", stats.loadDuration)
+                    )
+                }
+                .padding(.leading, 18)
+            }
+        }
+    }
+
+    private func statDetail(_ title: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+
+            Text(value)
+                .font(.caption2)
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+        }
     }
 }
 
